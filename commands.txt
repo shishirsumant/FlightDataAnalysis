@@ -1,0 +1,149 @@
+Hadoop installation on fully distributed mode:
+Number of instances – 2 (1 master and 1 slave)
+Instance type – t2.medium with 4 GB memory
+
+Steps performed:
+1) Setup passphraseless ssh between master and slave. 
+Create aliases for the name node and the data node by creating a file called config in ~/.ssh/config as:
+Host <Hostname>(namenode and datanode in our case)
+HostName <public DNS of both the nodes>
+User <Userbname>
+IdentityFile <The pem private key file path>
+
+ssh-keygen -f ~/.ssh/id_rsa -t rsa -P ""
+cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+cat ~/.ssh/id_rsa.pub | ssh datanode 'cat >> ~/.ssh/authorized_keys
+
+2) Install Java and Hadoop on both the nodes.
+
+3) Change configuration files in both the nodes as follows:
+Set the java path in /home/ubuntu/Hadoop/etc/Hadoop/Hadoop-env.sh as:
+export JAVA_HOME=/usr/lib/jvm/java-8-oracle
+
+4) Change core-site.xml on both nodes as follows:
+<configuration>
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://namenode_public_dns:9000</value>
+  </property>
+</configuration>
+
+5) Change yarn-site.xml on both nodes as follows:
+<configuration>
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property> 
+  <property>
+    <name>yarn.nodemanager.aux-services.mapreduce.shuffle.class</name>
+    <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+  </property>
+  <property>
+    <name>yarn.resourcemanager.hostname</name>
+    <value>namenode_public_dns</value>
+  </property>
+</configuration>
+
+6) Change mapred-site.xml on both nodes as follows:
+<configuration>
+  <property>
+    <name>mapreduce.jobtracker.address</name>
+    <value>namenode_public_dns:8021</value>
+  </property>
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+</configuration>
+
+7) Change hdfs-site.xml in the name node as follows:
+
+<configuration>
+ <property>
+ <name>dfs.replication</name>
+ <value>1</value>
+ <description>Default block replication.
+ The actual number of replications can be specified when the file is created.
+ The default is used if replication is not specified in create time.
+ </description>
+ </property>
+ <property>
+ <name>dfs.namenode.name.dir</name>
+ <value>file:///app/hadoop/hadoop_data/hdfs/namenode</value>
+ </property>
+ <property>
+ <name>dfs.datanode.data.dir</name>
+ <value>file:///app/hadoop/hadoop_data/hdfs/datanode</value>
+ </property>
+ <property>
+ <name>dfs.permissions.enabled</name>
+ <value>false</value>
+</property>
+</configuration>
+
+8) Edit the masters and slaves files to contain information of namenode in masters file and datanode information in slaves file.
+9) In the datanode, edit the hdfs-site as follows:
+  <configuration>
+  <property>
+    <name>dfs.replication</name>
+    <value>2</value>
+  </property>
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///usr/local/hadoop/hadoop_data/hdfs/namenode</value>
+  </property>
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///usr/local/hadoop/hadoop_data/hdfs/datanode</value>
+  </property>
+  </configuration>
+
+10) Make folder called datanode in the data node
+11) In the Hadoop bin folder, run the following commands to start the Hadoop clusters.
+Start-dfs.sh
+Start-yarn.sh
+mr-jobhistory-daemon.sh start historyserver 
+
+
+To setup Oozie, perform the below steps:
+
+1) Install maven and download Oozie
+2) Go to the Oozie/bin folder and rum command ‘./mkdistro.sh -DskipTests’
+3) If it runs successfully, There will be a file called oozie-4.3.1-hadooplibs.tar.gz
+4) tar -xzvf oozie-4.3.1-hadooplibs.tar.gz
+5) cp oozie-4.3.0/hadooplibs/hadooplib-2.9.1.oozie-4.3.1/* libext
+6) wget http://archive.cloudera.com/gplextras/misc/ext-2.2.zip
+7) Add the following property in core-site.xml
+  <property>
+      <name>hadoop.proxyuser.ec2-user.hosts</name>
+      <value>*</value>
+  </property>
+  <property>
+      <name>hadoop.proxyuser.ec2-user.groups</name>
+      <value>*</value>
+  </property>
+
+8) Reboot the Hadoop cluster
+9) In the oozie4.3.1/bin folder, run the following command:
+oozie-setup.sh prepare-war
+10) In file oozie-site.xml present in the oozie configuration directory, add the following lines:
+<property>
+        <name>oozie.service.HadoopAccessorService.hadoop.configurations</name>
+        <value>*=/usr/local/hadoop/etc/hadoop</value>
+    </property>
+
+    <property>
+        <name>oozie.service.WorkflowAppService.system.libpath</name>
+        <value>/user/ec2-user/share/lib</value>
+    </property>
+
+11) Create a database for oozie using the following command:
+ooziedb.sh create -sqlfile oozie.sql -run
+12) Start the Oozie service using: oozied.sh start
+13) The status can be verified using: oozie admin --oozie http://localhost:11000/oozie -status
+14) Add input files using:
+    Hdfs dfs -put ~/*.csv.bz2 /input
+15) Run oozie with following command:
+oozie job -oozie http://localhost:11000/oozie -config job.properties -run
+
+
